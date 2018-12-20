@@ -91,8 +91,8 @@ type ReconcilePodSet struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePodSet) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling PodSet")
+	reqLogger := log.WithValues("PodSet.Namespace", request.Namespace, "PodSet.Name", request.Name)
+	reqLogger.Info("Reconciling Starting")
 
 	// Fetch the PodSet instance
 	instance := &operatorv1alpha1.PodSet{}
@@ -108,7 +108,7 @@ func (r *ReconcilePodSet) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
-	// List the Pods owned by the PodSet.
+	// List the Pods managed by the PodSet.
 	pods, err := listPods(r, instance)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -137,17 +137,18 @@ func (r *ReconcilePodSet) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
+	reqLogger.Info("Reconciling Complete")
 	return reconcile.Result{}, nil
 }
 
 // addPod will create a new Pod based on the given PodSet.
 func addPod(r *ReconcilePodSet, cr *operatorv1alpha1.PodSet) error {
-	pod := newBusyboxPod(cr)
-	err := r.client.Create(context.TODO(), pod)
+	pod := newNginxPod(cr)
+	err := controllerutil.SetControllerReference(cr, pod, r.scheme)
 	if err != nil {
 		return err
 	}
-	return controllerutil.SetControllerReference(cr, pod, r.scheme)
+	return r.client.Create(context.TODO(), pod)
 }
 
 // defaultLabels returns the default set of labels for the PodSet.
@@ -209,12 +210,31 @@ func newBusyboxPod(cr *operatorv1alpha1.PodSet) *corev1.Pod {
 	}
 }
 
+// newNginxPod returns a simple nginx pod for the given PodSet.
+func newNginxPod(cr *operatorv1alpha1.PodSet) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: fmt.Sprintf("%s-", cr.Name),
+			Namespace:    cr.Namespace,
+			Labels:       labelsForPodSet(cr),
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "nginx",
+					Image: "nginx:stable-alpine",
+				},
+			},
+		},
+	}
+}
+
 // removePod will delete the first pod in the given slice of Pods.
 func removePod(r *ReconcilePodSet, pods []corev1.Pod) error {
 	return r.client.Delete(context.TODO(), &pods[0])
 }
 
-// updateStatus will update the status for the PodSet.
+// updateStatus will update PodNames with the current list of Pods managed by the the PodSet.
 func updateStatus(r *ReconcilePodSet, cr *operatorv1alpha1.PodSet, pods []corev1.Pod) error {
 	podNames := make([]string, 0)
 	for _, pod := range pods {
