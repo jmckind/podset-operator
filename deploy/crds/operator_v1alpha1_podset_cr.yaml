@@ -1,0 +1,6 @@
+apiVersion: operator.runk8s.io/v1alpha1
+kind: PodSet
+metadata:
+  name: example-podset
+spec:
+  size: 3

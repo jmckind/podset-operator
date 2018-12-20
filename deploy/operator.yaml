@@ -16,7 +16,7 @@ spec:
       containers:
         - name: podset-operator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: quay.io/john_mckenzie/podset-operator
           ports:
           - containerPort: 60000
             name: metrics
